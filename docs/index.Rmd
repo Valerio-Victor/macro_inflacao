@@ -68,7 +68,7 @@ name: introducao
 ```{r }
 library(magrittr, include.only = '%>%')
 
-ipca_ts <- sidrar::get_sidra(api = '/t/1737/n1/all/v/63,69,2266/p/all/d/v63%202,v69%202,v2266%2013') %>%
+ipca_ts <- sidrar::get_sidra(api = '/t/1737/n1/all/v/69/p/all/d/v69%202') %>%
   janitor::clean_names()
 
 acum_ano <- ipca_ts %>%
@@ -77,23 +77,23 @@ acum_ano <- ipca_ts %>%
                    valor = round(valor, 6)) %>%
   dplyr::mutate(mes = lubridate::month(data)) %>%
   dplyr::filter(mes == 12) %>%
-  dplyr::filter(data >= zoo::as.yearmon(1990, 01)) %>%
-  dplyr::filter(data <= zoo::as.yearmon(2000, 01)) %>%
+  # dplyr::filter(data >= zoo::as.yearmon(1990, 01)) %>%
+  # dplyr::filter(data <= zoo::as.yearmon(2000, 01)) %>%
   dplyr::mutate(data = lubridate::year(data)) %>%
-  dplyr::select(data, valor) %>% 
+  dplyr::select(data, valor) %>%
   dplyr::rename('Data' = data,
-                'Valor' = valor) %>% 
-  
+                'Valor' = valor) %>%
+
   ggplot2::ggplot() +
   ggplot2::geom_line(mapping = ggplot2::aes(x = Data, y = Valor),
                      colour = '#1c5253',
                      size = .5) +
-  
+
   ggplot2::geom_point(mapping = ggplot2::aes(x = Data, y = Valor),
                       colour = '#1c5253',
                       size = .75) +
   ggplot2::scale_y_continuous(labels = scales::number_format(suffix = '%')) +
-  ggplot2::scale_x_continuous(breaks = seq(1990, 2000, 2)) +
+  # ggplot2::scale_x_continuous(breaks = seq(1990, 2000, 2)) +
   ggplot2::labs(title = 'IPCA',
                 x = 'Meses',
                 y = 'Acumulado no Ano',
@@ -129,16 +129,34 @@ de consumo. Para tanto, basta-se definir alguns critérios para o grupo
  ---
 
 ```{r,  warning = F,message = F, error = F, echo = F, fig.align = 'center', dpi = 300}
-
 library(magrittr, include.only = '%>%')
+library(httr)
+library(jsonlite)
 
-dados_difusao <- BETS::BETSget(code = 21379,
-                         data.frame = TRUE,
-                         from = '1990-01-01') %>% 
-  dplyr::rename('Data' = date,
-                'Valor' = value)
+# dados_difusao <- BETS::BETSget(code = 21379,
+#                          data.frame = TRUE,
+#                          from = '1990-01-01') %>%
+#   dplyr::rename('Data' = date,
+#                 'Valor' = value)
+serie <- 21379
+inicio <- '01/01/1990'
+fim <- format(Sys.Date(), '%d/%m/%Y')
 
-difusao <- dados_difusao %>% 
+url <- paste0(
+  'https://api.bcb.gov.br/dados/serie/bcdata.sgs.', 
+  serie,
+  '/dados?formato=json&dataInicial=',
+  inicio,
+  '&dataFinal=',
+  fim)
+
+response <- GET(url)
+
+dados_difusao <- fromJSON(content(response, "text")) %>% 
+  dplyr::transmute(Data = lubridate::dmy(data),
+                   Valor = as.numeric(valor))
+
+difusao <- dados_difusao %>%
   ggplot2::ggplot() +
   ggplot2::geom_line(mapping = ggplot2::aes(x = Data, y = Valor),
                      colour = '#1c5253',
@@ -418,7 +436,8 @@ especifidades de cálculos, as formas de análise são similares.
   compreendidos entre **1 (um) e 40 (quarenta) salários-mínimos**, qualquer que 
   seja a fonte de rendimentos, e residentes nas áreas urbanas das regiões;
   
-  - Portanto, o foco é representar uma cesta de consumo típica da **classe média**.
+  - Portanto, o foco é representar uma cesta de consumo típica de **90% da 
+  população brasileira**.
   
 ---
 <div style="text-align: justify">
@@ -555,11 +574,29 @@ $$Taxa \ de \ Inflação \ no \ Período \ t = \frac{IPCA_t - IPCA_{t-1}}{IPCA_{
 
 library(magrittr, include.only = '%>%')
 
-var_ipca_cheio <- BETS::BETSget(code = 433,
-                                data.frame = TRUE,
-                                from = '1995-01-01') %>% 
-  dplyr::rename('Data' = date,
-                'Valor' = value) 
+# var_ipca_cheio <- BETS::BETSget(code = 433,
+#                                 data.frame = TRUE,
+#                                 from = '1995-01-01') %>% 
+#   dplyr::rename('Data' = date,
+#                 'Valor' = value) 
+
+serie <- 433
+inicio <- '01/01/1995'
+fim <- format(Sys.Date(), '%d/%m/%Y')
+
+url <- paste0(
+  'https://api.bcb.gov.br/dados/serie/bcdata.sgs.', 
+  serie,
+  '/dados?formato=json&dataInicial=',
+  inicio,
+  '&dataFinal=',
+  fim)
+
+response <- GET(url)
+
+var_ipca_cheio <- fromJSON(content(response, "text")) %>% 
+  dplyr::transmute(Data = lubridate::dmy(data),
+                   Valor = as.numeric(valor))
 
 var_ipca_cheio_gg <- var_ipca_cheio %>% 
   ggplot2::ggplot() +
@@ -641,78 +678,127 @@ widgetframe::frameWidget(pesos, width = '100%', height = '100%')
 
 library(magrittr, include.only = '%>%')
 
-var_ipca_aliment <- BETS::BETSget(code = 1635,
-                                  data.frame = TRUE,
-                                  from = '2005-01-01') %>% 
-  dplyr::mutate(Grupo = 'Alimentos e Bebidas') %>% 
-  dplyr::rename('Data' = date,
-                'Valor' = value)
 
-var_ipca_habit <- BETS::BETSget(code = 1636,
-                                data.frame = TRUE,
-                                from = '2005-01-01') %>% 
-  dplyr::mutate(Grupo = 'Habitação') %>% 
-  dplyr::rename('Data' = date,
-                'Valor' = value)
+codigos <- data.frame(
+  cod = c(1635,
+          1636,
+          1637,
+          1638,
+          1639,
+          1640,
+          1641,
+          1642,
+          1643),
+  grupo = c('Alimentos e Bebidas',
+            'Habitação',
+            'Artigos de Residência',
+            'Vestuário',
+            'Transportes',
+            'Comunicação',
+            'Saúde e Cuidados Pessoais',
+            'Despesas Pessoais',
+            'Educação'))
+inicio <- '01/01/2005'
+fim <- format(Sys.Date(), '%d/%m/%Y')
+consolidado <- data.frame()
 
-var_ipca_art_res <- BETS::BETSget(code = 1637,
-                                  data.frame = TRUE,
-                                  from = '2005-01-01') %>% 
-  dplyr::mutate(Grupo = 'Artigos de Residência') %>% 
-  dplyr::rename('Data' = date,
-                'Valor' = value)
+for (i in 1:9) {
+  
+  url <- paste0(
+    'https://api.bcb.gov.br/dados/serie/bcdata.sgs.', 
+    codigos[i,1],
+    '/dados?formato=json&dataInicial=',
+    inicio,
+    '&dataFinal=',
+    fim)
+  
+  response <- GET(url)
+  
+  var_ipca_grupo <- fromJSON(content(response, "text")) %>% 
+    dplyr::transmute(Data = lubridate::dmy(data),
+                     Valor = as.numeric(valor)) %>% 
+    dplyr::mutate(Grupo = codigos[i,2])
+  
+  consolidado <- rbind(consolidado, var_ipca_grupo)
+  
+}
 
-var_ipca_vest <- BETS::BETSget(code = 1638,
-                               data.frame = TRUE,
-                               from = '2005-01-01') %>% 
-  dplyr::mutate(Grupo = 'Vestuário') %>% 
-  dplyr::rename('Data' = date,
-                'Valor' = value)
-
-var_ipca_transp <- BETS::BETSget(code = 1639,
-                                 data.frame = TRUE,
-                                 from = '2005-01-01') %>% 
-  dplyr::mutate(Grupo = 'Transportes') %>% 
-  dplyr::rename('Data' = date,
-                'Valor' = value)
-
-var_ipca_comunic <- BETS::BETSget(code = 1640,
-                                  data.frame = TRUE,
-                                  from = '2005-01-01') %>% 
-  dplyr::mutate(Grupo = 'Comunicação') %>% 
-  dplyr::rename('Data' = date,
-                'Valor' = value)
-
-var_ipca_saud_cuid <- BETS::BETSget(code = 1641,
-                                    data.frame = TRUE,
-                                    from = '2005-01-01') %>% 
-  dplyr::mutate(Grupo = 'Saúde e Cuidados Pessoais') %>% 
-  dplyr::rename('Data' = date,
-                'Valor' = value)
-
-var_ipca_desp_pessoais <- BETS::BETSget(code = 1642,
-                                        data.frame = TRUE,
-                                        from = '2005-01-01') %>% 
-  dplyr::mutate(Grupo = 'Despesas Pessoais') %>% 
-  dplyr::rename('Data' = date,
-                'Valor' = value)
-
-var_ipca_educ <- BETS::BETSget(code = 1643,
-                               data.frame = TRUE,
-                               from = '2005-01-01') %>% 
-  dplyr::mutate(Grupo = 'Educação') %>% 
-  dplyr::rename('Data' = date,
-                'Valor' = value)
-
-consolidado <- rbind(var_ipca_aliment,
-                     var_ipca_habit,
-                     var_ipca_art_res,
-                     var_ipca_vest,
-                     var_ipca_transp,
-                     var_ipca_comunic,
-                     var_ipca_saud_cuid,
-                     var_ipca_desp_pessoais,
-                     var_ipca_educ)
+# 
+# 
+# 
+# 
+# var_ipca_aliment <- BETS::BETSget(code = 1635,
+#                                   data.frame = TRUE,
+#                                   from = '2005-01-01') %>% 
+#   dplyr::mutate(Grupo = 'Alimentos e Bebidas') %>% 
+#   dplyr::rename('Data' = date,
+#                 'Valor' = value)
+# 
+# var_ipca_habit <- BETS::BETSget(code = 1636,
+#                                 data.frame = TRUE,
+#                                 from = '2005-01-01') %>% 
+#   dplyr::mutate(Grupo = 'Habitação') %>% 
+#   dplyr::rename('Data' = date,
+#                 'Valor' = value)
+# 
+# var_ipca_art_res <- BETS::BETSget(code = 1637,
+#                                   data.frame = TRUE,
+#                                   from = '2005-01-01') %>% 
+#   dplyr::mutate(Grupo = 'Artigos de Residência') %>% 
+#   dplyr::rename('Data' = date,
+#                 'Valor' = value)
+# 
+# var_ipca_vest <- BETS::BETSget(code = 1638,
+#                                data.frame = TRUE,
+#                                from = '2005-01-01') %>% 
+#   dplyr::mutate(Grupo = 'Vestuário') %>% 
+#   dplyr::rename('Data' = date,
+#                 'Valor' = value)
+# 
+# var_ipca_transp <- BETS::BETSget(code = 1639,
+#                                  data.frame = TRUE,
+#                                  from = '2005-01-01') %>% 
+#   dplyr::mutate(Grupo = 'Transportes') %>% 
+#   dplyr::rename('Data' = date,
+#                 'Valor' = value)
+# 
+# var_ipca_comunic <- BETS::BETSget(code = 1640,
+#                                   data.frame = TRUE,
+#                                   from = '2005-01-01') %>% 
+#   dplyr::mutate(Grupo = 'Comunicação') %>% 
+#   dplyr::rename('Data' = date,
+#                 'Valor' = value)
+# 
+# var_ipca_saud_cuid <- BETS::BETSget(code = 1641,
+#                                     data.frame = TRUE,
+#                                     from = '2005-01-01') %>% 
+#   dplyr::mutate(Grupo = 'Saúde e Cuidados Pessoais') %>% 
+#   dplyr::rename('Data' = date,
+#                 'Valor' = value)
+# 
+# var_ipca_desp_pessoais <- BETS::BETSget(code = 1642,
+#                                         data.frame = TRUE,
+#                                         from = '2005-01-01') %>% 
+#   dplyr::mutate(Grupo = 'Despesas Pessoais') %>% 
+#   dplyr::rename('Data' = date,
+#                 'Valor' = value)
+# 
+# var_ipca_educ <- BETS::BETSget(code = 1643,
+#                                data.frame = TRUE,
+#                                from = '2005-01-01') %>% 
+#   dplyr::mutate(Grupo = 'Educação') %>% 
+#   dplyr::rename('Data' = date,
+#                 'Valor' = value)
+# 
+# consolidado <- rbind(var_ipca_aliment,
+#                      var_ipca_habit,
+#                      var_ipca_art_res,
+#                      var_ipca_vest,
+#                      var_ipca_transp,
+#                      var_ipca_comunic,
+#                      var_ipca_saud_cuid,
+#                      var_ipca_desp_pessoais,
+#                      var_ipca_educ)
 
 consolidadogg <- consolidado %>% 
   ggplot2::ggplot() +
@@ -873,17 +959,58 @@ partir de fatores de oferta e demanda.
 library(magrittr, include.only = '%>%')
 library(plotly)
 
-var_livres <- BETS::BETSget(code = 11428,
-                            data.frame = TRUE,
-                            from = '2000-01-01') %>% 
-  dplyr::rename('Data' = date,
-                'Livres' = value)
+# var_livres <- BETS::BETSget(code = 11428,
+#                             data.frame = TRUE,
+#                             from = '2000-01-01') %>% 
+#   dplyr::rename('Data' = date,
+#                 'Livres' = value)
+# 
+# var_monitor <- BETS::BETSget(code = 4449,
+#                              data.frame = TRUE,
+#                              from = '2000-01-01') %>% 
+#   dplyr::rename('Data' = date,
+#                 'Monitorados' = value)
 
-var_monitor <- BETS::BETSget(code = 4449,
-                             data.frame = TRUE,
-                             from = '2000-01-01') %>% 
-  dplyr::rename('Data' = date,
-                'Monitorados' = value)
+serie <- 11428
+inicio <- '01/01/2000'
+fim <- format(Sys.Date(), '%d/%m/%Y')
+
+url <- paste0(
+  'https://api.bcb.gov.br/dados/serie/bcdata.sgs.', 
+  serie,
+  '/dados?formato=json&dataInicial=',
+  inicio,
+  '&dataFinal=',
+  fim)
+
+response <- GET(url)
+
+var_livres <- fromJSON(content(response, "text")) %>% 
+  dplyr::transmute(Data = lubridate::dmy(data),
+                   Valor = as.numeric(valor)) %>% 
+  dplyr::rename('Data' = Data,
+                'Livres' = Valor)
+
+serie <- 4449
+inicio <- '01/01/2000'
+fim <- format(Sys.Date(), '%d/%m/%Y')
+
+url <- paste0(
+  'https://api.bcb.gov.br/dados/serie/bcdata.sgs.', 
+  serie,
+  '/dados?formato=json&dataInicial=',
+  inicio,
+  '&dataFinal=',
+  fim)
+
+response <- GET(url)
+
+var_monitor <- fromJSON(content(response, "text")) %>% 
+  dplyr::transmute(Data = lubridate::dmy(data),
+                   Valor = as.numeric(valor)) %>% 
+  dplyr::rename('Data' = Data,
+                'Monitorados' = Valor)
+
 
 consolidado <- dplyr::left_join(var_livres, var_monitor, by = c('Data' = 'Data')) %>% 
   tidyr::pivot_longer(-Data, names_to = 'Componente', values_to = 'Valor')
@@ -948,17 +1075,57 @@ widgetframe::frameWidget(consolidado, width = '100%', height = '100%')
 library(magrittr, include.only = '%>%')
 library(plotly)
 
-var_comerc <- BETS::BETSget(code = 4447,
-                            data.frame = TRUE,
-                            from = '2000-01-01') %>% 
-  dplyr::rename('Data' = date,
-                'Comercializáveis' = value)
+serie <- 4447
+inicio <- '01/01/2000'
+fim <- format(Sys.Date(), '%d/%m/%Y')
 
-var_n_comerc <- BETS::BETSget(code = 4448,
-                              data.frame = TRUE,
-                              from = '2000-01-01')%>% 
-  dplyr::rename('Data' = date,
-                'Não Comercializáveis' = value)
+url <- paste0(
+  'https://api.bcb.gov.br/dados/serie/bcdata.sgs.', 
+  serie,
+  '/dados?formato=json&dataInicial=',
+  inicio,
+  '&dataFinal=',
+  fim)
+
+response <- GET(url)
+
+var_comerc <- fromJSON(content(response, "text")) %>% 
+  dplyr::transmute(Data = lubridate::dmy(data),
+                   Valor = as.numeric(valor)) %>% 
+  dplyr::rename('Data' = Data,
+                'Comercializáveis' = Valor)
+
+serie <- 4448
+inicio <- '01/01/2000'
+fim <- format(Sys.Date(), '%d/%m/%Y')
+
+url <- paste0(
+  'https://api.bcb.gov.br/dados/serie/bcdata.sgs.', 
+  serie,
+  '/dados?formato=json&dataInicial=',
+  inicio,
+  '&dataFinal=',
+  fim)
+
+response <- GET(url)
+
+var_n_comerc <- fromJSON(content(response, "text")) %>% 
+  dplyr::transmute(Data = lubridate::dmy(data),
+                   Valor = as.numeric(valor)) %>% 
+  dplyr::rename('Data' = Data,
+                'Não Comercializáveis' = Valor)
+# 
+# var_comerc <- BETS::BETSget(code = 4447,
+#                             data.frame = TRUE,
+#                             from = '2000-01-01') %>% 
+#   dplyr::rename('Data' = date,
+#                 'Comercializáveis' = value)
+# 
+# var_n_comerc <- BETS::BETSget(code = 4448,
+#                               data.frame = TRUE,
+#                               from = '2000-01-01')%>% 
+#   dplyr::rename('Data' = date,
+#                 'Não Comercializáveis' = value)
 
 consolidado <- dplyr::left_join(var_comerc, var_n_comerc, by = c('Data' = 'Data')) %>% 
   tidyr::pivot_longer(-Data, names_to = 'Componente', values_to = 'Valor')
